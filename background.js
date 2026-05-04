@@ -5,6 +5,32 @@ let recordingStartEpoch = null;
 let clickEvents = [];
 let activeTabId = null;
 let pendingStart = false;
+const runtimeQueue = [];
+
+async function safeRuntimeSend(message) {
+  try {
+    await chrome.runtime.sendMessage(message);
+    await flushRuntimeQueue();
+  } catch (error) {
+    runtimeQueue.push(message);
+  }
+}
+
+async function flushRuntimeQueue() {
+  if (!runtimeQueue.length) {
+    return;
+  }
+  const pending = runtimeQueue.splice(0);
+  for (let i = 0; i < pending.length; i += 1) {
+    const message = pending[i];
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (error) {
+      runtimeQueue.unshift(message, ...pending.slice(i + 1));
+      break;
+    }
+  }
+}
 
 async function ensureOffscreen() {
   const has = await chrome.offscreen.hasDocument();
@@ -41,14 +67,14 @@ async function startRecording() {
     chrome.tabs.sendMessage(activeTabId, { type: "recording-starting" });
   }
 
-  chrome.runtime.sendMessage({ type: "offscreen-start" });
+  safeRuntimeSend({ type: "offscreen-start" });
 }
 
 function pauseRecording() {
   if (!recording) {
     return;
   }
-  chrome.runtime.sendMessage({ type: "offscreen-pause" });
+  safeRuntimeSend({ type: "offscreen-pause" });
   if (activeTabId !== null) {
     chrome.tabs.sendMessage(activeTabId, { type: "recording-paused" });
   }
@@ -58,7 +84,7 @@ function resumeRecording() {
   if (!recording) {
     return;
   }
-  chrome.runtime.sendMessage({ type: "offscreen-resume" });
+  safeRuntimeSend({ type: "offscreen-resume" });
   if (activeTabId !== null) {
     chrome.tabs.sendMessage(activeTabId, { type: "recording-resumed" });
   }
@@ -68,7 +94,7 @@ function stopRecording() {
   if (!recording && !pendingStart) {
     return;
   }
-  chrome.runtime.sendMessage({ type: "offscreen-stop" });
+  safeRuntimeSend({ type: "offscreen-stop" });
   if (activeTabId !== null) {
     chrome.tabs.sendMessage(activeTabId, { type: "recording-stopped" });
   }
@@ -101,6 +127,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === "keep-alive") {
+    if (recording || pendingStart) {
+      flushRuntimeQueue();
+    }
+    sendResponse({ ok: true, recording });
+    return;
+  }
+
   if (message.type === "click-event") {
     if (recording && typeof message.timestamp === "number") {
       clickEvents.push({ timestamp: message.timestamp, x: message.x, y: message.y });
@@ -118,7 +152,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         startEpoch: recordingStartEpoch
       });
     }
-    chrome.runtime.sendMessage({ type: "recording-status", status: "recording" });
+    safeRuntimeSend({ type: "recording-status", status: "recording" });
     return;
   }
 
@@ -130,7 +164,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       videoBlob: message.videoBlob,
       clickEvents
     };
-    chrome.runtime.sendMessage(payload);
+    safeRuntimeSend(payload);
     if (activeTabId !== null) {
       chrome.tabs.sendMessage(activeTabId, { type: "recording-complete" });
     }

@@ -2,6 +2,40 @@ let isRecording = false;
 let recordingStartEpoch = null;
 let toolbarFrame = null;
 let toolbarVisible = false;
+let retryTimer = null;
+let keepAliveTimer = null;
+const sendQueue = [];
+const RETRY_INTERVAL_MS = 1000;
+const KEEP_ALIVE_MS = 15000;
+
+async function safeRuntimeSend(message, queueOnFail = true) {
+  try {
+    await chrome.runtime.sendMessage(message);
+    await flushSendQueue();
+    return true;
+  } catch (error) {
+    if (queueOnFail) {
+      sendQueue.push(message);
+    }
+    return false;
+  }
+}
+
+async function flushSendQueue() {
+  if (!sendQueue.length) {
+    return;
+  }
+  const pending = sendQueue.splice(0);
+  for (let i = 0; i < pending.length; i += 1) {
+    const message = pending[i];
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (error) {
+      sendQueue.unshift(message, ...pending.slice(i + 1));
+      break;
+    }
+  }
+}
 
 function getEpochNow() {
   return performance.timeOrigin + performance.now();
@@ -47,7 +81,7 @@ function onClick(event) {
     return;
   }
   const timestamp = getEpochNow() - recordingStartEpoch;
-  chrome.runtime.sendMessage({
+  safeRuntimeSend({
     type: "click-event",
     timestamp,
     x: event.clientX,
@@ -60,6 +94,16 @@ function startTracking(startEpoch) {
   recordingStartEpoch = startEpoch;
   showToolbar();
   window.addEventListener("click", onClick, true);
+  if (!retryTimer) {
+    retryTimer = setInterval(() => {
+      flushSendQueue();
+    }, RETRY_INTERVAL_MS);
+  }
+  if (!keepAliveTimer) {
+    keepAliveTimer = setInterval(() => {
+      safeRuntimeSend({ type: "keep-alive" }, false);
+    }, KEEP_ALIVE_MS);
+  }
 }
 
 function stopTracking() {
@@ -67,6 +111,14 @@ function stopTracking() {
   recordingStartEpoch = null;
   window.removeEventListener("click", onClick, true);
   hideToolbar();
+  if (retryTimer) {
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
 }
 
 chrome.runtime.onMessage.addListener((message) => {
