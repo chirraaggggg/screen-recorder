@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Screen Recorder</title>
+    <style>
+      :root {
+        --bg: #0f1c2e;
+        --panel: #132742;
+        --accent: #f2c14e;
+        --text: #f5f7fb;
+        --muted: #a9b7d0;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: linear-gradient(135deg, #0f1c2e 0%, #1a3151 100%);
+        color: var(--text);
+        font-family: "DM Sans", "Trebuchet MS", sans-serif;
+        width: 280px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 12px;
+        letter-spacing: 0.5px;
+      }
+      .status {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        flex: 1;
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text);
+        padding: 10px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #1b1b1b;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Screen Recorder</h1>
+    <div class="status" id="status">Idle</div>
+    <div class="row">
+      <button class="primary" id="startBtn">Record</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="stopBtn">Stop</button>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
