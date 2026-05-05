@@ -1,37 +1,24 @@
 {
   "manifest_version": 3,
-  "name": "Screen Recorder with Click Zoom",
+  "name": "ZoomClip — Screen Recorder",
   "version": "1.0.0",
-  "description": "Record the screen and capture click events with timestamps.",
+  "description": "Record the current tab and capture click events with timestamps.",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Screen Recorder"
+    "default_title": "ZoomClip"
   },
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "permissions": [
+    "tabCapture",
     "activeTab",
-    "scripting",
-    "tabs",
     "storage",
-    "offscreen"
+    "offscreen",
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
-  ],
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["toolbar.html", "toolbar.js"],
-      "matches": ["<all_urls>"]
-    }
   ]
 }

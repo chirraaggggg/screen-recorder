@@ -1,182 +1,209 @@
-const OFFSCREEN_URL = "offscreen.html";
+const OFFSCREEN_URL  = "offscreen.html";
+const KEEP_ALIVE_MS  = 20000;
 
-let recording = false;
-let recordingStartEpoch = null;
-let clickEvents = [];
-let activeTabId = null;
-let pendingStart = false;
-const runtimeQueue = [];
+let recording      = false;
+let isPaused       = false;
+let activeTabId    = null;
+let clickEvents    = [];
+let keepAliveTimer = null;
 
+// ─── Safe Wrappers ───────────────────────────────────────────────────────────
 async function safeRuntimeSend(message) {
-  try {
-    await chrome.runtime.sendMessage(message);
-    await flushRuntimeQueue();
-  } catch (error) {
-    runtimeQueue.push(message);
-  }
+  try { await chrome.runtime.sendMessage(message); } catch (_) {}
 }
 
-async function flushRuntimeQueue() {
-  if (!runtimeQueue.length) {
-    return;
-  }
-  const pending = runtimeQueue.splice(0);
-  for (let i = 0; i < pending.length; i += 1) {
-    const message = pending[i];
-    try {
-      await chrome.runtime.sendMessage(message);
-    } catch (error) {
-      runtimeQueue.unshift(message, ...pending.slice(i + 1));
-      break;
-    }
-  }
+async function safeTabSend(tabId, message) {
+  if (tabId === null || tabId === undefined) return;
+  try { await chrome.tabs.sendMessage(tabId, message); } catch (_) {}
 }
 
+async function safeStorageSet(values) {
+  try { await chrome.storage.local.set(values); } catch (_) {}
+}
+
+async function safeStorageClear() {
+  try { await chrome.storage.local.remove(["isRecording", "startTime", "isPaused"]); } catch (_) {}
+}
+
+// ─── Offscreen ───────────────────────────────────────────────────────────────
 async function ensureOffscreen() {
-  const has = await chrome.offscreen.hasDocument();
-  if (has) {
-    return;
-  }
-  await chrome.offscreen.createDocument({
-    url: OFFSCREEN_URL,
-    reasons: ["USER_MEDIA"],
-    justification: "Record screen and stream to MediaRecorder."
-  });
+  try {
+    const has = await chrome.offscreen.hasDocument();
+    if (has) return;
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_URL,
+      reasons: ["USER_MEDIA"],
+      justification: "Record tab audio/video while popup is closed."
+    });
+  } catch (_) {}
 }
 
-async function getActiveTabId() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tabs.length) {
-    return null;
-  }
-  return tabs[0].id;
+async function closeOffscreen() {
+  try {
+    const has = await chrome.offscreen.hasDocument();
+    if (has) await chrome.offscreen.closeDocument();
+  } catch (_) {}
 }
 
-async function startRecording() {
-  if (recording || pendingStart) {
-    return;
+// ─── Content Script ──────────────────────────────────────────────────────────
+async function injectContentIfNeeded(tabId) {
+  // Ping first — if content.js already loaded it will respond
+  try {
+    const res = await chrome.tabs.sendMessage(tabId, { type: "PING" });
+    if (res && res.ok) {
+      // Already there — just start tracking
+      await safeTabSend(tabId, { type: "START_TRACKING" });
+      return;
+    }
+  } catch (_) {
+    // Not injected yet — fall through to inject
   }
-  pendingStart = true;
-  clickEvents = [];
-  recordingStartEpoch = null;
 
-  await ensureOffscreen();
-  activeTabId = await getActiveTabId();
-
-  if (activeTabId !== null) {
-    chrome.tabs.sendMessage(activeTabId, { type: "recording-starting" });
-  }
-
-  safeRuntimeSend({ type: "offscreen-start" });
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content.js"]
+    });
+    // Small delay for script to initialize
+    setTimeout(async () => {
+      await safeTabSend(tabId, { type: "START_TRACKING" });
+    }, 150);
+  } catch (_) {}
 }
 
-function pauseRecording() {
-  if (!recording) {
-    return;
-  }
-  safeRuntimeSend({ type: "offscreen-pause" });
-  if (activeTabId !== null) {
-    chrome.tabs.sendMessage(activeTabId, { type: "recording-paused" });
-  }
+// ─── Keepalive ───────────────────────────────────────────────────────────────
+function startKeepAlive() {
+  if (keepAliveTimer) return;
+  keepAliveTimer = setInterval(() => {
+    try { void chrome.runtime.getPlatformInfo(); } catch (_) {}
+  }, KEEP_ALIVE_MS);
 }
 
-function resumeRecording() {
-  if (!recording) {
-    return;
-  }
-  safeRuntimeSend({ type: "offscreen-resume" });
-  if (activeTabId !== null) {
-    chrome.tabs.sendMessage(activeTabId, { type: "recording-resumed" });
-  }
+function stopKeepAlive() {
+  if (!keepAliveTimer) return;
+  clearInterval(keepAliveTimer);
+  keepAliveTimer = null;
 }
 
-function stopRecording() {
-  if (!recording && !pendingStart) {
-    return;
-  }
-  safeRuntimeSend({ type: "offscreen-stop" });
-  if (activeTabId !== null) {
-    chrome.tabs.sendMessage(activeTabId, { type: "recording-stopped" });
-  }
+function resetState() {
+  recording   = false;
+  isPaused    = false;
+  activeTabId = null;
+  stopKeepAlive();
 }
 
+// ─── Message Handler ─────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || !message.type) {
-    return;
+  if (!message || !message.type) return;
+
+  // ── START ────────────────────────────────────────────────────────────────
+  if (message.type === "START_RECORDING") {
+    clickEvents  = [];
+    recording    = true;
+    activeTabId  = message.tabId || null;
+    startKeepAlive();
+
+    ensureOffscreen().then(async () => {
+      // Forward streamId to offscreen for getUserMedia
+      await safeRuntimeSend({ type: "OFFSCREEN_START", streamId: message.streamId });
+
+      // Inject click tracker into recorded tab
+      if (activeTabId !== null) {
+        await injectContentIfNeeded(activeTabId);
+      }
+
+      await safeStorageSet({ isRecording: true, startTime: Date.now(), isPaused: false });
+      sendResponse({ ok: true });
+    });
+
+    return true; // keep message channel open for async sendResponse
   }
 
-  if (message.type === "ui-start") {
-    startRecording();
+  // ── PAUSE ────────────────────────────────────────────────────────────────
+  if (message.type === "PAUSE_RECORDING") {
+    isPaused = true;
+    safeRuntimeSend({ type: "OFFSCREEN_PAUSE" });
+    if (activeTabId !== null) safeTabSend(activeTabId, { type: "PAUSE_TRACKING" });
+    safeStorageSet({ isPaused: true });
     sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "ui-pause") {
-    if (recording && !message.paused) {
-      pauseRecording();
-    } else if (recording && message.paused) {
-      resumeRecording();
-    }
+  // ── RESUME ───────────────────────────────────────────────────────────────
+  if (message.type === "RESUME_RECORDING") {
+    isPaused = false;
+    safeRuntimeSend({ type: "OFFSCREEN_RESUME" });
+    if (activeTabId !== null) safeTabSend(activeTabId, { type: "RESUME_TRACKING" });
+    safeStorageSet({ isPaused: false });
     sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "ui-stop") {
-    stopRecording();
+  // ── STOP ─────────────────────────────────────────────────────────────────
+  if (message.type === "STOP_RECORDING") {
+    safeRuntimeSend({ type: "OFFSCREEN_STOP" });
+    if (activeTabId !== null) safeTabSend(activeTabId, { type: "STOP_TRACKING" });
+    resetState();
+    safeStorageClear();
     sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "keep-alive") {
-    if (recording || pendingStart) {
-      flushRuntimeQueue();
-    }
-    sendResponse({ ok: true, recording });
+  // ── OFFSCREEN STARTED → relay real startEpoch to popup ──────────────────
+  if (message.type === "OFFSCREEN_STARTED") {
+    safeRuntimeSend({ type: "OFFSCREEN_STARTED", startEpoch: message.startEpoch });
+    sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "click-event") {
-    if (recording && typeof message.timestamp === "number") {
-      clickEvents.push({ timestamp: message.timestamp, x: message.x, y: message.y });
-    }
-    return;
-  }
+  // ── RECORDING COMPLETE (from offscreen) ──────────────────────────────────
+  if (message.type === "RECORDING_COMPLETE") {
+    // Only accept from our offscreen document
+    if (!sender || !sender.url || !sender.url.includes("offscreen.html")) return;
 
-  if (message.type === "offscreen-started") {
-    recording = true;
-    pendingStart = false;
-    recordingStartEpoch = message.startEpoch;
-    if (activeTabId !== null) {
-      chrome.tabs.sendMessage(activeTabId, {
-        type: "recording-started",
-        startEpoch: recordingStartEpoch
-      });
-    }
-    safeRuntimeSend({ type: "recording-status", status: "recording" });
-    return;
-  }
-
-  if (message.type === "offscreen-stopped") {
     recording = false;
-    pendingStart = false;
+    stopKeepAlive();
+
     const payload = {
-      type: "recording-complete",
-      videoBlob: message.videoBlob,
-      clickEvents
+      type:        "RECORDING_COMPLETE",
+      videoBase64: message.videoBase64,
+      mimeType:    message.mimeType,
+      clickEvents: [...clickEvents]
     };
+
+    // Try sending directly to popup (works if popup is open)
     safeRuntimeSend(payload);
-    if (activeTabId !== null) {
-      chrome.tabs.sendMessage(activeTabId, { type: "recording-complete" });
-    }
+
+    // Also persist so popup can download if it was closed during recording
+    chrome.storage.local.set({ pendingDownload: payload }).catch(() => {});
+
     clickEvents = [];
-    recordingStartEpoch = null;
+    safeStorageClear();
+    closeOffscreen();
+    sendResponse({ ok: true });
+    return;
+  }
+
+  // ── CLICK EVENT (from content.js) ────────────────────────────────────────
+  if (message.type === "CLICK_EVENT") {
+    if (recording && !isPaused && message.payload) {
+      clickEvents.push(message.payload);
+      // Show live click count in popup
+      safeRuntimeSend({ type: "CLICK_COUNT", count: clickEvents.length });
+    }
+    return;
+  }
+
+  // ── PING (used by injectContentIfNeeded) ─────────────────────────────────
+  if (message.type === "CONTENT_READY") {
+    sendResponse({ ok: true });
     return;
   }
 });
 
+// ─── On Install ──────────────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
-  recording = false;
-  pendingStart = false;
+  resetState();
   clickEvents = [];
-  recordingStartEpoch = null;
+  chrome.storage.local.clear().catch(() => {});
 });

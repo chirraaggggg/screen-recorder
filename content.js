@@ -1,153 +1,84 @@
-let isRecording = false;
-let recordingStartEpoch = null;
-let toolbarFrame = null;
-let toolbarVisible = false;
-let retryTimer = null;
-let keepAliveTimer = null;
-const sendQueue = [];
-const RETRY_INTERVAL_MS = 1000;
-const KEEP_ALIVE_MS = 15000;
+// content.js — injected into the recorded tab on demand
+// Does NOT auto-start. Waits for START_TRACKING message from background.js
 
-async function safeRuntimeSend(message, queueOnFail = true) {
-  try {
-    await chrome.runtime.sendMessage(message);
-    await flushSendQueue();
-    return true;
-  } catch (error) {
-    if (queueOnFail) {
-      sendQueue.push(message);
-    }
-    return false;
-  }
+let isTracking        = false;
+let recordingStartTime = null;
+
+// ─── Safe Send ───────────────────────────────────────────────────────────────
+async function safeRuntimeSend(message) {
+  try { await chrome.runtime.sendMessage(message); } catch (_) {}
 }
 
-async function flushSendQueue() {
-  if (!sendQueue.length) {
-    return;
-  }
-  const pending = sendQueue.splice(0);
-  for (let i = 0; i < pending.length; i += 1) {
-    const message = pending[i];
-    try {
-      await chrome.runtime.sendMessage(message);
-    } catch (error) {
-      sendQueue.unshift(message, ...pending.slice(i + 1));
-      break;
-    }
-  }
-}
-
-function getEpochNow() {
-  return performance.timeOrigin + performance.now();
-}
-
-function ensureToolbar() {
-  if (toolbarFrame) {
-    return;
-  }
-  const frame = document.createElement("iframe");
-  frame.src = chrome.runtime.getURL("toolbar.html");
-  frame.style.position = "fixed";
-  frame.style.top = "16px";
-  frame.style.right = "16px";
-  frame.style.width = "260px";
-  frame.style.height = "56px";
-  frame.style.border = "none";
-  frame.style.zIndex = "2147483647";
-  frame.style.background = "transparent";
-  frame.setAttribute("allow", "display-capture");
-  toolbarFrame = frame;
-}
-
-function showToolbar() {
-  if (!toolbarFrame) {
-    ensureToolbar();
-  }
-  if (!toolbarVisible && toolbarFrame) {
-    document.documentElement.appendChild(toolbarFrame);
-    toolbarVisible = true;
-  }
-}
-
-function hideToolbar() {
-  if (toolbarFrame && toolbarVisible) {
-    toolbarFrame.remove();
-    toolbarVisible = false;
-  }
-}
-
+// ─── Click Handler ───────────────────────────────────────────────────────────
 function onClick(event) {
-  if (!isRecording || recordingStartEpoch === null) {
-    return;
-  }
-  const timestamp = getEpochNow() - recordingStartEpoch;
-  safeRuntimeSend({
-    type: "click-event",
-    timestamp,
-    x: event.clientX,
-    y: event.clientY
-  });
+  if (!isTracking || recordingStartTime === null) return;
+
+  const payload = {
+    timestamp: performance.now() - recordingStartTime, // ms since recording started
+    x:         event.clientX,
+    y:         event.clientY,
+    target:    event.target?.tagName || "UNKNOWN"
+  };
+
+  safeRuntimeSend({ type: "CLICK_EVENT", payload });
 }
 
-function startTracking(startEpoch) {
-  isRecording = true;
-  recordingStartEpoch = startEpoch;
-  showToolbar();
+// ─── Tracking Control ────────────────────────────────────────────────────────
+function startTracking() {
+  if (isTracking) return; // guard — never double-attach
+  isTracking         = true;
+  recordingStartTime = performance.now();
+  // capture:true = fires before any other handler, can't be stopped by stopPropagation
   window.addEventListener("click", onClick, true);
-  if (!retryTimer) {
-    retryTimer = setInterval(() => {
-      flushSendQueue();
-    }, RETRY_INTERVAL_MS);
-  }
-  if (!keepAliveTimer) {
-    keepAliveTimer = setInterval(() => {
-      safeRuntimeSend({ type: "keep-alive" }, false);
-    }, KEEP_ALIVE_MS);
-  }
 }
 
 function stopTracking() {
-  isRecording = false;
-  recordingStartEpoch = null;
+  isTracking         = false;
+  recordingStartTime = null;
   window.removeEventListener("click", onClick, true);
-  hideToolbar();
-  if (retryTimer) {
-    clearInterval(retryTimer);
-    retryTimer = null;
-  }
-  if (keepAliveTimer) {
-    clearInterval(keepAliveTimer);
-    keepAliveTimer = null;
-  }
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (!message || !message.type) {
+function pauseTracking() {
+  // Keep listener attached but stop logging clicks
+  isTracking = false;
+}
+
+function resumeTracking() {
+  if (!recordingStartTime) recordingStartTime = performance.now();
+  isTracking = true;
+}
+
+// ─── Message Listener ────────────────────────────────────────────────────────
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (!message || !message.type) return;
+
+  if (message.type === "PING") {
+    // Lets background know this script is already loaded
+    sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "recording-starting") {
-    showToolbar();
+  if (message.type === "START_TRACKING") {
+    startTracking();
+    sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "recording-started") {
-    startTracking(message.startEpoch);
-    return;
-  }
-
-  if (message.type === "recording-stopped") {
+  if (message.type === "STOP_TRACKING") {
     stopTracking();
+    sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "recording-paused") {
-    isRecording = false;
+  if (message.type === "PAUSE_TRACKING") {
+    pauseTracking();
+    sendResponse({ ok: true });
     return;
   }
 
-  if (message.type === "recording-resumed") {
-    isRecording = true;
+  if (message.type === "RESUME_TRACKING") {
+    resumeTracking();
+    sendResponse({ ok: true });
     return;
   }
 });

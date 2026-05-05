@@ -2,62 +2,199 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Screen Recorder</title>
+    <title>ZoomClip</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg: #0f1c2e;
-        --panel: #132742;
-        --accent: #f2c14e;
-        --text: #f5f7fb;
-        --muted: #a9b7d0;
+        --bg: #0f0f0f;
+        --panel: #181818;
+        --panel-2: #1f1f1f;
+        --text: #f5f5f5;
+        --muted: #a0a0a0;
+        --accent: #ff4d4d;
+        --accent-2: #38d86f;
+        --error: #ff6b6b;
       }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 16px;
-        background: linear-gradient(135deg, #0f1c2e 0%, #1a3151 100%);
+        padding: 16px 16px 12px;
+        background: var(--bg);
         color: var(--text);
-        font-family: "DM Sans", "Trebuchet MS", sans-serif;
-        width: 280px;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        width: 320px;
       }
-      h1 {
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .logo-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent-2);
+        box-shadow: 0 0 10px rgba(56, 216, 111, 0.7);
+      }
+      .title {
         font-size: 16px;
-        margin: 0 0 12px;
-        letter-spacing: 0.5px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
       }
+      .card {
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 14px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      .timer {
+        font-size: 22px;
+        font-weight: 600;
+        text-align: center;
+        letter-spacing: 1px;
+        opacity: 0;
+        height: 0;
+        overflow: hidden;
+        transition: opacity 0.2s ease, height 0.2s ease;
+      }
+      .timer.active {
+        opacity: 1;
+        height: 28px;
+      }
+      .buttons {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+      }
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+      }
+      button:active { transform: scale(0.96); }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
+      .record-btn {
+        width: 64px;
+        height: 64px;
+        padding: 0;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, #ff7373, var(--accent));
+        box-shadow: 0 0 18px rgba(255, 77, 77, 0.5);
+        flex-shrink: 0;
+      }
+      .record-btn:hover:not(:disabled) {
+        box-shadow: 0 0 28px rgba(255, 77, 77, 0.8);
+        transform: scale(1.04);
+      }
+      .pause-btn {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .pause-btn:hover:not(:disabled) { background: #2a2a2a; }
+      .stop-btn {
+        background: #2a2a2a;
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .stop-btn:hover:not(:disabled) { background: #333; }
       .status {
         font-size: 12px;
         color: var(--muted);
-        margin-bottom: 12px;
+        text-align: center;
+        min-height: 16px;
+        transition: color 0.2s ease;
       }
-      .row {
-        display: flex;
-        gap: 8px;
+      .clicks-info {
+        font-size: 11px;
+        color: var(--accent-2);
+        text-align: center;
+        opacity: 0;
+        height: 0;
+        overflow: hidden;
+        transition: opacity 0.3s ease, height 0.2s ease;
       }
-      button {
-        flex: 1;
-        background: var(--panel);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        color: var(--text);
-        padding: 10px 8px;
-        border-radius: 8px;
-        cursor: pointer;
+      .clicks-info.visible {
+        opacity: 1;
+        height: 16px;
+      }
+      .error {
         font-size: 12px;
+        color: var(--error);
+        min-height: 16px;
+        text-align: center;
+        word-break: break-word;
+        line-height: 1.4;
       }
-      button.primary {
-        background: var(--accent);
-        color: #1b1b1b;
+      .bottom {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--panel);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--muted);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: rgba(56, 216, 111, 0.15);
+        color: var(--accent-2);
+        padding: 3px 9px;
+        border-radius: 999px;
         font-weight: 600;
+        font-size: 11px;
       }
+      .pill::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent-2);
+      }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
-    <h1>Screen Recorder</h1>
-    <div class="status" id="status">Idle</div>
-    <div class="row">
-      <button class="primary" id="startBtn">Record</button>
-      <button id="pauseBtn">Pause</button>
-      <button id="stopBtn">Stop</button>
+    <div class="header">
+      <div class="logo-dot"></div>
+      <div class="title">ZoomClip</div>
     </div>
+
+    <div class="card">
+      <div class="timer" id="timer">00:00</div>
+      <div class="buttons">
+        <button class="record-btn" id="recordBtn" aria-label="Start Recording"></button>
+        <button class="pause-btn" id="pauseBtn" hidden>Pause</button>
+        <button class="stop-btn" id="stopBtn" hidden>Stop</button>
+      </div>
+      <div class="status" id="status">Ready to record</div>
+      <div class="clicks-info" id="clicksInfo">0 clicks captured</div>
+      <div class="error" id="error"></div>
+    </div>
+
+    <div class="bottom">
+      <span>Auto-zoom on click</span>
+      <span class="pill">ON</span>
+    </div>
+
     <script src="popup.js"></script>
   </body>
 </html>
