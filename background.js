@@ -5,6 +5,8 @@ let recording      = false;
 let isPaused       = false;
 let activeTabId    = null;
 let clickEvents    = [];
+let clickCount     = 0;
+let pendingEditorTabId = null;
 let keepAliveTimer = null;
 
 // ─── Safe Wrappers ───────────────────────────────────────────────────────────
@@ -89,8 +91,52 @@ function resetState() {
   recording   = false;
   isPaused    = false;
   activeTabId = null;
+  clickCount  = 0;
   stopKeepAlive();
 }
+
+// ─── Editor Relay Injection ────────────────────────────────────────────────
+async function injectEditorRelay(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        let sent = false;
+
+        const send = async () => {
+          if (sent) return;
+          try {
+            const { pendingClickEvents } = await chrome.storage.session.get(["pendingClickEvents"]);
+            if (Array.isArray(pendingClickEvents) && pendingClickEvents.length > 0) {
+              window.postMessage({ type: "ZOOM_CLIP_EVENTS", clickEvents: pendingClickEvents }, "*");
+              sent = true;
+            }
+          } catch (_) {}
+        };
+
+        window.addEventListener("message", (e) => {
+          if (e?.data?.type === "ZOOM_CLIP_REQUEST_EVENTS") {
+            void send();
+          }
+        });
+
+        // Try a couple times in case the app hasn't mounted its listener yet.
+        setTimeout(() => void send(), 150);
+        setTimeout(() => void send(), 900);
+      },
+    });
+  } catch (_) {}
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!pendingEditorTabId) return;
+  if (tabId !== pendingEditorTabId) return;
+  if (changeInfo.status !== "complete") return;
+
+  // Inject relay once the editor tab has finished loading.
+  injectEditorRelay(tabId);
+  pendingEditorTabId = null;
+});
 
 // ─── Message Handler ─────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -99,6 +145,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // ── START ────────────────────────────────────────────────────────────────
   if (message.type === "START_RECORDING") {
     clickEvents  = [];
+    clickCount   = 0;
     recording    = true;
     activeTabId  = message.tabId || null;
     startKeepAlive();
@@ -164,18 +211,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     recording = false;
     stopKeepAlive();
 
+    const savedClickEvents = [...clickEvents];
+
     const payload = {
       type:        "RECORDING_COMPLETE",
       videoBase64: message.videoBase64,
       mimeType:    message.mimeType,
-      clickEvents: [...clickEvents]
+      clickEvents: savedClickEvents
     };
 
     // Try sending directly to popup (works if popup is open)
     safeRuntimeSend(payload);
 
-    // Also persist so popup can download if it was closed during recording
+    // Persist so popup can download if it was closed during recording
     chrome.storage.local.set({ pendingDownload: payload }).catch(() => {});
+
+    // ── NEW: Store click events in session storage + open editor ──────────────
+    // Keep timestamps in ms (web editor uses ms)
+    const editorEvents = savedClickEvents.map(ev => ({
+      id:          ev.id,
+      timestamp:   ev.timestamp, // ms
+      x:           ev.x,
+      y:           ev.y,
+      confidence:  1,
+      source:      'EXTENSION',
+      target:      ev.target || 'EXTENSION'
+    }));
+
+    chrome.storage.session.set({
+      pendingClickEvents: editorEvents,
+      pendingTimestamp:   Date.now()
+    }).then(() => {
+      chrome.tabs.create(
+        { url: 'http://localhost:3000/editor?source=extension' },
+        (tab) => {
+          if (tab && typeof tab.id === 'number') {
+            pendingEditorTabId = tab.id;
+          }
+        }
+      );
+    }).catch(() => {});
+    // ─────────────────────────────────────────────────────────────────────────
 
     clickEvents = [];
     safeStorageClear();
@@ -187,11 +263,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // ── CLICK EVENT (from content.js) ────────────────────────────────────────
   if (message.type === "CLICK_EVENT") {
     if (recording && !isPaused && message.payload) {
-      clickEvents.push(message.payload);
+      clickCount += 1;
       // Show live click count in popup
-      safeRuntimeSend({ type: "CLICK_COUNT", count: clickEvents.length });
+      safeRuntimeSend({ type: "CLICK_COUNT", count: clickCount });
     }
+    sendResponse({ ok: true });
     return;
+  }
+
+  // ── Full click list ready (from content.js on STOP_TRACKING) ─────────────
+  if (message.type === "CLICK_EVENTS_READY") {
+    if (Array.isArray(message.payload)) {
+      clickEvents = message.payload;
+      clickCount = clickEvents.length;
+      safeRuntimeSend({ type: "CLICK_COUNT", count: clickCount });
+    }
+    sendResponse({ ok: true });
+    return;
+  }
+
+  // ── Editor can request stored events (only works from an injected script) ─
+  if (message.type === "GET_PENDING_CLICK_EVENTS") {
+    chrome.storage.session
+      .get(["pendingClickEvents"])
+      .then((res) => sendResponse({ events: res.pendingClickEvents || [] }))
+      .catch(() => sendResponse({ events: [] }));
+    return true;
+  }
+
+  // ── GET PENDING EVENTS (from editor page via chrome.runtime.sendMessage) ──
+  if (message.type === "GET_PENDING_CLICK_EVENTS") {
+    chrome.storage.session.get(['pendingClickEvents', 'pendingTimestamp'])
+      .then(result => {
+        const MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+        const isStale = !result.pendingTimestamp ||
+          (Date.now() - result.pendingTimestamp) > MAX_AGE_MS;
+
+        if (isStale) {
+          // Clear stale data
+          chrome.storage.session.remove(['pendingClickEvents', 'pendingTimestamp']).catch(() => {});
+          sendResponse({ events: [] });
+        } else {
+          sendResponse({ events: result.pendingClickEvents || [] });
+          // Clear after delivering
+          chrome.storage.session.remove(['pendingClickEvents', 'pendingTimestamp']).catch(() => {});
+        }
+      })
+      .catch(() => sendResponse({ events: [] }));
+    return true; // keep channel open for async sendResponse
   }
 
   // ── PING (used by injectContentIfNeeded) ─────────────────────────────────
