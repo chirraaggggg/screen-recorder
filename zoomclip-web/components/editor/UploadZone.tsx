@@ -1,15 +1,39 @@
-"use client";
+'use client';
 
-import React, { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useRef } from 'react';
+import { useEditorStore } from '@/store/editor-store';
 
-interface UploadZoneProps {
-  onFileSelect: (file: File) => void;
-}
-
-export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect }) => {
+export function UploadZone() {
+  const { setVideo } = useEditorStore();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateAndLoadFile = (file: File) => {
+    const validTypes = ['video/mp4', 'video/webm'];
+    if (!validTypes.includes(file.type)) {
+      alert('Please select a .webm or .mp4 file');
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+
+    // Create video element to get dimensions
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+
+    video.onloadedmetadata = () => {
+      setVideo(file, url, video.duration, video.videoWidth, video.videoHeight);
+      video.remove();
+    };
+
+    video.onerror = () => {
+      alert('Failed to load video file');
+      URL.revokeObjectURL(url);
+      video.remove();
+    };
+
+    video.src = url;
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -24,10 +48,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect }) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.type.includes("video")) {
-        onFileSelect(file);
-      }
+      validateAndLoadFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -37,54 +58,110 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect }) => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onFileSelect(e.target.files[0]);
+      validateAndLoadFile(e.target.files[0]);
     }
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="flex items-center justify-center w-full h-full p-8"
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+        padding: 32,
+      }}
+    >
+      <div
+        onClick={handleClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: 672,
+          height: 320,
+          borderRadius: 16,
+          border: `2px dashed ${isDragging ? 'var(--green)' : 'var(--border)'}`,
+          backgroundColor: isDragging ? 'rgba(52,211,116,0.04)' : 'var(--panel)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
       >
-        <div
-          onClick={handleClick}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`relative flex flex-col items-center justify-center w-full max-w-2xl h-80 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 ${
-            isDragging
-              ? "border-[var(--zoom-accent)] bg-[var(--zoom-accent)]/10 drop-shadow-[0_0_20px_rgba(99,102,241,0.2)]"
-              : "border-[var(--zoom-border)] bg-[var(--zoom-surface)] hover:border-[var(--zoom-text-secondary)]"
-          }`}
+        <svg
+          width={48}
+          height={48}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          style={{
+            marginBottom: 16,
+            color: isDragging ? 'var(--green)' : 'var(--muted)',
+            transition: 'color 0.2s ease',
+          }}
         >
-          <svg
-            className={`w-16 h-16 mb-4 ${
-              isDragging ? "text-[var(--zoom-accent)]" : "text-[var(--zoom-text-secondary)]"
-            } transition-colors`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-          <p className="text-xl font-medium text-[var(--zoom-text-primary)] mb-2">
-            Drop your screen recording here
-          </p>
-          <p className="text-sm text-[var(--zoom-text-secondary)]">
-            Supports .mp4, .webm (or use the Chrome Extension)
-          </p>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleChange}
-            accept="video/mp4,video/webm"
-            className="hidden"
-          />
-        </div>
-      </motion.div>
-    </AnimatePresence>
+          <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+
+        <p
+          style={{
+            fontSize: 18,
+            fontWeight: 500,
+            color: 'var(--text)',
+            marginBottom: 8,
+          }}
+        >
+          Drop your screen recording here
+        </p>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: 'var(--muted)',
+            marginBottom: 20,
+          }}
+        >
+          Supports .webm and .mp4 files
+        </p>
+
+        <button
+          style={{
+            padding: '10px 20px',
+            border: '1px solid var(--border)',
+            backgroundColor: 'transparent',
+            color: 'var(--text)',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--green)';
+            e.currentTarget.style.color = 'var(--green)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.color = 'var(--text)';
+          }}
+        >
+          Browse files
+        </button>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleChange}
+          accept="video/mp4,video/webm"
+          style={{ display: 'none' }}
+        />
+      </div>
+    </div>
   );
-};
+}

@@ -1,70 +1,217 @@
-"use client";
+'use client';
 
-import type { ClickEvent } from "@/lib/types";
+import { useState } from 'react';
+import { useEditorStore } from '@/store/editor-store';
+import { Slider } from '@/components/ui/Slider';
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
+export function ZoomEventsList() {
+  const {
+    clickEvents,
+    removeClickEvent,
+    setCurrentTime,
+    currentTime,
+    addClickEvent,
+  } = useEditorStore();
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [isAddingMode, setIsAddingMode] = useState(false);
 
-type ZoomEventsListProps = {
-  clickEvents: ClickEvent[];
-  onSeek: (timestampMs: number) => void;
-  canExport: boolean;
-  onExport: () => void;
-};
+  const formatTime = (ms: number): string => {
+    const secs = Math.floor(ms / 1000);
+    const millis = Math.floor((ms % 1000) / 100);
+    return `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}.${millis}`;
+  };
 
-export function ZoomEventsList({
-  clickEvents,
-  onSeek,
-  canExport,
-  onExport,
-}: ZoomEventsListProps) {
+  const handleEventClick = (timestamp: number) => {
+    setCurrentTime(timestamp / 1000);
+  };
+
+  const isSelected = (timestamp: number): boolean => {
+    const timeMs = currentTime * 1000;
+    return Math.abs(timeMs - timestamp) < 500;
+  };
+
+  const handleAddClick = () => {
+    setIsAddingMode(!isAddingMode);
+  };
+
   return (
-    <div className="flex h-full flex-col rounded-card border border-cardBorder bg-panel p-4">
-      <div className="text-sm font-semibold text-text">Zoom Events</div>
+    <div
+      style={{
+        width: 280,
+        backgroundColor: 'var(--panel)',
+        borderLeft: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: '16px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+            }}
+          >
+            ZOOM EVENTS
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--green)',
+              backgroundColor: 'rgba(52,211,116,0.1)',
+              padding: '2px 6px',
+              borderRadius: 4,
+            }}
+          >
+            {clickEvents.length}
+          </span>
+        </div>
+        <button
+          onClick={handleAddClick}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: isAddingMode ? 'var(--green)' : 'var(--text)',
+            backgroundColor: isAddingMode ? 'rgba(52,211,116,0.1)' : 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '4px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          + Add
+        </button>
+      </div>
 
-      <div className="mt-3 flex-1 overflow-y-auto pr-1">
+      {/* Event list */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
         {clickEvents.length === 0 ? (
-          <div className="text-sm text-muted">Paste click events JSON to see markers.</div>
-        ) : (
-          <div className="space-y-2">
-            {clickEvents.map((ev, idx) => (
-              <button
-                key={`${ev.timestamp}-${idx}`}
-                type="button"
-                className="w-full rounded-input border border-inputBorder bg-panel2 p-3 text-left hover:border-cardBorder"
-                onClick={() => onSeek(ev.timestamp)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-text">
-                    {formatTime(ev.timestamp / 1000)}
-                  </div>
-                  <div className="text-[11px] font-semibold text-muted">{ev.target}</div>
-                </div>
-                <div className="mt-1 text-[11px] text-muted">
-                  x: {Math.round(ev.x)} • y: {Math.round(ev.y)}
-                </div>
-              </button>
-            ))}
+          <div
+            style={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              color: 'var(--muted)',
+              fontSize: 13,
+            }}
+          >
+            No clicks detected yet. Use the extension to record, or click '+ Add' to place zoom
+            points manually.
           </div>
+        ) : (
+          clickEvents.map((event, index) => (
+            <div
+              key={index}
+              onClick={() => handleEventClick(event.timestamp)}
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              style={{
+                backgroundColor: 'var(--panel2)',
+                border: `1px solid ${isSelected(event.timestamp) ? 'var(--green)' : 'var(--border)'}`,
+                borderLeft: `3px solid ${isSelected(event.timestamp) ? 'var(--green)' : '#f59e0b'}`,
+                borderRadius: 8,
+                padding: '12px',
+                marginBottom: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '4px',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {formatTime(event.timestamp)}
+                </span>
+                {hoveredIndex === index && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeClickEvent(index);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--muted)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      padding: '2px 6px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+                {event.target} • {event.x}, {event.y}
+              </div>
+              {/* Mini zoom slider per event */}
+              <Slider
+                value={1.8}
+                min={1}
+                max={3}
+                step={0.1}
+                onChange={() => {}}
+                label="Zoom"
+                formatValue={(v) => `${v.toFixed(1)}x`}
+              />
+            </div>
+          ))
         )}
       </div>
 
-      <button
-        type="button"
-        disabled={!canExport}
-        onClick={onExport}
-        className={
-          "mt-4 rounded-pill px-4 py-3 text-sm font-semibold " +
-          (canExport
-            ? "bg-green text-bg shadow-[0_0_10px_rgba(56,216,111,0.7)] hover:brightness-110 active:brightness-95"
-            : "bg-panel2 text-muted border border-inputBorder cursor-not-allowed")
-        }
-      >
-        Export MP4
-      </button>
+      {/* Add button at bottom */}
+      <div style={{ padding: '12px', borderTop: '1px solid var(--border)' }}>
+        <button
+          onClick={handleAddClick}
+          style={{
+            width: '100%',
+            padding: '12px',
+            border: '1px dashed var(--border)',
+            borderRadius: 8,
+            backgroundColor: 'transparent',
+            color: 'var(--muted)',
+            fontSize: 13,
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--green)';
+            e.currentTarget.style.color = 'var(--green)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.color = 'var(--muted)';
+          }}
+        >
+          + Add Zoom Point
+        </button>
+      </div>
     </div>
   );
 }

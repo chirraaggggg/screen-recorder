@@ -1,127 +1,192 @@
-"use client";
+'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from "react";
-import { ClickEvent } from "../../lib/types";
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useEditorStore } from '@/store/editor-store';
 
-interface TimelineProps {
-  duration: number;
-  currentTime: number;
-  events: ClickEvent[];
-  onSeek: (time: number) => void;
-}
-
-export const Timeline: React.FC<TimelineProps> = ({ duration, currentTime, events, onSeek }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+export function Timeline() {
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [hoveredEvent, setHoveredEvent] = useState<ClickEvent | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const calculateTimeFromMouseEvent = useCallback((e: React.MouseEvent | MouseEvent) => {
-    if (!containerRef.current || duration === 0) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    return (x / rect.width) * duration;
-  }, [duration]);
+  const {
+    currentTime,
+    videoDuration,
+    clickEvents,
+    setCurrentTime,
+    setIsPlaying,
+  } = useEditorStore();
 
-  const handlePointerDown = (e: React.MouseEvent) => {
+  const scrubberPosition = videoDuration > 0 ? (currentTime / videoDuration) * 100 : 0;
+
+  const calculateTimeFromMouse = useCallback((clientX: number) => {
+    const bar = timelineRef.current;
+    if (!bar || videoDuration === 0) return 0;
+    const rect = bar.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left - 16, rect.width - 32));
+    const percentage = x / (rect.width - 32);
+    return percentage * videoDuration;
+  }, [videoDuration]);
+
+  const handleBarClick = (e: React.MouseEvent) => {
+    const time = calculateTimeFromMouse(e.clientX);
+    setCurrentTime(time);
+  };
+
+  const handleScrubberMouseDown = () => {
     setIsDragging(true);
-    onSeek(calculateTimeFromMouseEvent(e));
+    setIsPlaying(false);
   };
 
   useEffect(() => {
-    const handlePointerMove = (e: MouseEvent) => {
+    const handleMouseMove = (e: MouseEvent) => {
       if (isDragging) {
-        onSeek(calculateTimeFromMouseEvent(e));
+        const time = calculateTimeFromMouse(e.clientX);
+        setCurrentTime(time);
       }
     };
 
-    const handlePointerUp = () => {
+    const handleMouseUp = () => {
       setIsDragging(false);
     };
 
     if (isDragging) {
-      window.addEventListener("mousemove", handlePointerMove);
-      window.addEventListener("mouseup", handlePointerUp);
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
     }
 
     return () => {
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mouseup", handlePointerUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, onSeek, calculateTimeFromMouseEvent]);
+  }, [isDragging, calculateTimeFromMouse, setCurrentTime, setIsPlaying]);
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const formatTime = (timeMs: number) => {
+    const secs = Math.floor(timeMs / 1000);
+    const ms = Math.floor((timeMs % 1000) / 100);
+    return `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}.${ms}`;
+  };
 
-  // Generate ticks every 2 seconds
-  const ticks = [];
-  for (let t = 0; t <= duration; t += 2) {
-    ticks.push(t);
+  const handleClickMarkerClick = (timestamp: number) => {
+    setCurrentTime(timestamp / 1000);
+  };
+
+  // Generate time markers every 2 seconds
+  const timeMarkers = [];
+  if (videoDuration > 0) {
+    for (let t = 0; t <= videoDuration; t += 2) {
+      timeMarkers.push(t);
+    }
   }
 
   return (
-    <div 
-      className="relative w-full h-[56px] bg-[var(--zoom-surface)] border-t border-[var(--zoom-border)] shrink-0 select-none cursor-pointer overflow-hidden"
-      ref={containerRef}
-      onMouseDown={handlePointerDown}
+    <div
+      ref={timelineRef}
+      style={{
+        height: 48,
+        borderTop: '1px solid var(--border)',
+        position: 'relative',
+        backgroundColor: 'var(--bg)',
+        padding: '0 16px',
+      }}
     >
-      {/* Time Ticks */}
-      <div className="absolute top-1 w-full h-full pointer-events-none">
-        {ticks.map((t) => (
-          <div
-            key={t}
-            className="absolute h-full border-l border-[var(--zoom-border)] flex flex-col"
-            style={{ left: `${(t / duration) * 100}%` }}
-          >
-            <span className="text-[10px] text-[var(--zoom-text-secondary)] ml-1 -mt-0.5">
-              0:{t.toString().padStart(2, '0')}
-            </span>
-          </div>
-        ))}
+      {/* Track */}
+      <div
+        style={{
+          height: 4,
+          backgroundColor: 'var(--panel2)',
+          borderRadius: 2,
+          position: 'absolute',
+          top: '50%',
+          left: 16,
+          right: 16,
+          transform: 'translateY(-50%)',
+        }}
+      >
+        {/* Fill */}
+        <div
+          style={{
+            height: 4,
+            backgroundColor: 'var(--green)',
+            borderRadius: 2,
+            width: `${scrubberPosition}%`,
+          }}
+        />
       </div>
 
-      {/* Progress Track */}
-      <div 
-        className="absolute bottom-0 h-1 bg-[var(--zoom-accent)]/80 pointer-events-none"
-        style={{ width: `${progressPercent}%`, transition: isDragging ? 'none' : 'width 100ms linear' }}
+      {/* Scrubber */}
+      <div
+        onMouseDown={handleScrubberMouseDown}
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: '50%',
+          backgroundColor: 'white',
+          position: 'absolute',
+          top: '50%',
+          transform: `translateY(-50%) translateX(-50%)`,
+          left: `calc(16px + (100% - 32px) * ${scrubberPosition / 100})`,
+          cursor: isDragging ? 'grabbing' : 'pointer',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+        }}
       />
 
-      {/* Playhead / Scrubber */}
-      <div 
-        className="absolute top-0 bottom-0 w-px bg-[var(--zoom-accent)] pointer-events-none flex flex-col items-center"
-        style={{ left: `${progressPercent}%`, transition: isDragging ? 'none' : 'left 100ms linear' }}
-      >
-        <div className="w-2.5 h-2.5 bg-[var(--zoom-accent)] -mt-1 rounded-sm shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-      </div>
+      {/* Time markers */}
+      {timeMarkers.map((t) => (
+        <div
+          key={t}
+          style={{
+            position: 'absolute',
+            bottom: 4,
+            left: `calc(16px + (100% - 32px) * ${(t / videoDuration)})`,
+            transform: 'translateX(-50%)',
+            fontSize: 11,
+            color: 'var(--muted)',
+          }}
+        >
+          {Math.floor(t / 60)}:{(t % 60).toString().padStart(2, '0')}
+        </div>
+      ))}
 
-      {/* Click Events Markers */}
-      {events.map((ev) => {
-        const evTimeS = ev.timestamp / 1000;
-        const leftPercent = duration > 0 ? (evTimeS / duration) * 100 : 0;
-        const isPast = currentTime > evTimeS && currentTime < evTimeS + 1; // simple active state
+      {/* Click markers */}
+      {clickEvents.map((event, index) => {
+        const left = videoDuration > 0
+          ? (event.timestamp / (videoDuration * 1000)) * 100
+          : 0;
 
         return (
           <div
-            key={ev.id}
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"
-            style={{ left: `${leftPercent}%` }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSeek(evTimeS);
+            key={index}
+            onClick={() => handleClickMarkerClick(event.timestamp)}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: `calc(16px + (100% - 32px) * ${left / 100})`,
+              transform: 'translate(-50%, -50%) rotate(45deg)',
+              width: 8,
+              height: 8,
+              backgroundColor: '#f59e0b',
+              cursor: 'pointer',
             }}
-            onMouseEnter={() => setHoveredEvent(ev)}
-            onMouseLeave={() => setHoveredEvent(null)}
           >
-            <div className={`w-3 h-3 rotate-45 transform transition-all duration-200 cursor-pointer ${
-              isPast 
-                ? 'bg-[var(--zoom-text-primary)] shadow-[0_0_10px_rgba(255,255,255,0.8)] scale-110' 
-                : 'bg-[var(--zoom-accent)] hover:bg-[#818cf8] hover:scale-125'
-            }`} />
-            
-            {/* Tooltip */}
-            {hoveredEvent?.id === ev.id && (
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[var(--zoom-surface-light)] border border-[var(--zoom-border)] px-2 py-1 rounded shadow-lg text-[10px] font-mono text-[var(--zoom-text-primary)] whitespace-nowrap z-10 pointer-events-none">
-                0:{Math.floor(evTimeS).toString().padStart(2, '0')}.{Math.floor(((evTimeS % 1) * 100)).toString().padStart(2, '0')}
-                <br/>
-                x:{ev.x} y:{ev.y}
+            {hoveredIndex === index && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%) translateY(-4px)',
+                  backgroundColor: 'var(--panel2)',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  color: 'var(--text)',
+                  whiteSpace: 'nowrap',
+                  zIndex: 10,
+                }}
+              >
+                Click at {formatTime(event.timestamp)} — {event.target}
               </div>
             )}
           </div>
@@ -129,4 +194,4 @@ export const Timeline: React.FC<TimelineProps> = ({ duration, currentTime, event
       })}
     </div>
   );
-};
+}
