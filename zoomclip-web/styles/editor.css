@@ -1,22 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --zoom-bg: #080808;
-  --zoom-surface: #111111;
-  --zoom-surface-light: #161616;
-  --zoom-border: #1f1f1f;
+  --zoom-bg: #0f0f0f;
+  --zoom-surface: #161616;
+  --zoom-surface-light: #1f1f1f;
+  --zoom-border: #2a2a2a;
 
-  --zoom-accent: #6366f1;
-  --zoom-accent-hover: #818cf8;
-  --zoom-success: #22c55e;
+  --zoom-accent: #38d86f;
+  --zoom-accent-hover: #2cb85a;
+  --zoom-success: #38d86f;
+  --zoom-error: #ff4d4d;
 
-  --zoom-text-primary: #f1f5f9;
-  --zoom-text-secondary: #64748b;
+  --zoom-text-primary: #ffffff;
+  --zoom-text-secondary: #9ca3af;
+  --zoom-text-muted: #64748b;
 
-  --zoom-radius-panel: 10px;
-  --zoom-radius-button: 6px;
+  --zoom-radius-panel: 12px;
+  --zoom-radius-button: 8px;
 
-  --zoom-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4);
+  --zoom-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 
   --zoom-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }

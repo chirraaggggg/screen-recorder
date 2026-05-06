@@ -11,7 +11,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "ZoomClip",
-  description: "Auto-zoom on every click. Screen Studio quality. Any OS. Free.",
+  description: "Screen recorder with auto-zoom",
 };
 
 export default function RootLayout({

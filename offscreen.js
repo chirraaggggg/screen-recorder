@@ -1,7 +1,7 @@
+let mediaStream = null;
 let mediaRecorder = null;
-let mediaStream   = null;
-let chunks        = [];
-let mimeType      = "video/webm;codecs=vp9";
+let chunks = [];
+let startEpoch = null;
 
 // ─── Safe Send ───────────────────────────────────────────────────────────────
 async function safeRuntimeSend(message) {
@@ -9,137 +9,135 @@ async function safeRuntimeSend(message) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function getStartEpoch() {
-  // Absolute wall-clock ms — syncs with popup's Date.now() timer
-  return performance.timeOrigin + performance.now();
-}
-
-function getSupportedMimeType() {
-  const types = [
-    "video/webm;codecs=vp9",
-    "video/webm;codecs=vp8",
-    "video/webm"
-  ];
-  for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return "video/webm";
+function blobToBase64(blob) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function cleanup() {
-  if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop());
-  mediaStream   = null;
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+  }
+  mediaStream = null;
   mediaRecorder = null;
-  chunks        = [];
-}
-
-async function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror  = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
+  chunks = [];
 }
 
 // ─── Recording ───────────────────────────────────────────────────────────────
 async function startRecording(streamId) {
   if (!streamId) {
-    await safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64: null, mimeType });
+    cleanup();
     return;
   }
 
   try {
-    // getUserMedia with chromeMediaSource:'tab' + streamId is the correct
-    // way to capture in an offscreen document. getDisplayMedia is NOT used.
     const constraints = {
       video: {
         mandatory: {
-          chromeMediaSource:   "tab",
+          chromeMediaSource: 'tab',
           chromeMediaSourceId: streamId,
-          maxWidth:            1920,
-          maxHeight:           1080,
-          maxFrameRate:        60
+          maxWidth: 1920,
+          maxHeight: 1080,
+          maxFrameRate: 60
         }
       },
       audio: {
         mandatory: {
-          chromeMediaSource:   "tab",
+          chromeMediaSource: 'tab',
           chromeMediaSourceId: streamId
         }
       }
     };
 
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-    chunks      = [];
-    mimeType    = getSupportedMimeType();
+    chunks = [];
+
+    // Find supported MIME type
+    const mimeTypes = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ];
+    let mimeType = 'video/webm';
+    for (const type of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        mimeType = type;
+        break;
+      }
+    }
 
     mediaRecorder = new MediaRecorder(mediaStream, {
       mimeType,
-      videoBitsPerSecond: 8_000_000  // 8 Mbps — good quality for SaaS demos
+      videoBitsPerSecond: 8_000_000
     });
 
-    mediaRecorder.addEventListener("dataavailable", (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
+    mediaRecorder.addEventListener('dataavailable', (e) => {
+      if (e.data?.size > 0) chunks.push(e.data);
     });
 
-    mediaRecorder.addEventListener("stop", async () => {
+    mediaRecorder.addEventListener('stop', async () => {
+      const blob = new Blob(chunks, { type: mimeType });
+      const base64 = await blobToBase64(blob);
       try {
-        const blob         = new Blob(chunks, { type: mimeType });
-        const videoBase64  = await blobToBase64(blob);
-        await safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64, mimeType });
-      } catch (_) {
-        await safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64: null, mimeType });
-      } finally {
-        cleanup();
-      }
+        chrome.runtime.sendMessage({
+          type: 'RECORDING_COMPLETE',
+          videoBase64: base64,
+          mimeType,
+          startEpoch
+        });
+      } catch (_) {}
+      cleanup();
     });
 
-    // Capture epoch right before start for accurate timer sync
-    const startEpoch = getStartEpoch();
-    mediaRecorder.start(1000); // chunk every 1 second
+    startEpoch = performance.timeOrigin + performance.now();
+    mediaRecorder.start(1000);
 
-    // Notify background → popup with the real start time
-    await safeRuntimeSend({ type: "OFFSCREEN_STARTED", startEpoch });
+    try {
+      chrome.runtime.sendMessage({ type: 'OFFSCREEN_STARTED', startEpoch });
+    } catch (_) {}
 
   } catch (err) {
     cleanup();
-    await safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64: null, mimeType });
   }
 }
 
 function pauseRecording() {
-  try {
-    if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.pause();
-  } catch (_) {}
+  if (mediaRecorder?.state === 'recording') {
+    mediaRecorder.pause();
+  }
 }
 
 function resumeRecording() {
-  try {
-    if (mediaRecorder && mediaRecorder.state === "paused") mediaRecorder.resume();
-  } catch (_) {}
+  if (mediaRecorder?.state === 'paused') {
+    mediaRecorder.resume();
+  }
 }
 
 function stopRecording() {
-  try {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    } else {
-      // Never started — send empty signal so popup doesn't hang
-      safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64: null, mimeType });
-      cleanup();
-    }
-  } catch (_) {
-    safeRuntimeSend({ type: "RECORDING_COMPLETE", videoBase64: null, mimeType });
-    cleanup();
+  if (mediaRecorder?.state !== 'inactive') {
+    mediaRecorder.stop();
   }
 }
 
 // ─── Message Listener ────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message) => {
-  if (!message || !message.type) return;
-  if (message.type === "OFFSCREEN_START")  { startRecording(message.streamId); return; }
-  if (message.type === "OFFSCREEN_PAUSE")  { pauseRecording();  return; }
-  if (message.type === "OFFSCREEN_RESUME") { resumeRecording(); return; }
-  if (message.type === "OFFSCREEN_STOP")   { stopRecording();   return; }
+  if (!message?.type) return;
+
+  switch (message.type) {
+    case 'OFFSCREEN_START':
+      startRecording(message.streamId);
+      break;
+    case 'OFFSCREEN_PAUSE':
+      pauseRecording();
+      break;
+    case 'OFFSCREEN_RESUME':
+      resumeRecording();
+      break;
+    case 'OFFSCREEN_STOP':
+      stopRecording();
+      break;
+  }
 });

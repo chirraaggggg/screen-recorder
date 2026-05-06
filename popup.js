@@ -1,17 +1,26 @@
 // ─── Elements ────────────────────────────────────────────────────────────────
-const statusEl    = document.getElementById("status");
-const errorEl     = document.getElementById("error");
-const recordBtn   = document.getElementById("recordBtn");
-const pauseBtn    = document.getElementById("pauseBtn");
-const stopBtn     = document.getElementById("stopBtn");
-const timerEl     = document.getElementById("timer");
-const clicksInfoEl = document.getElementById("clicksInfo");
+const idleState = document.getElementById('idleState');
+const recordingState = document.getElementById('recordingState');
+const startRecordBtn = document.getElementById('startRecordBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const recordingTimer = document.getElementById('recordingTimer');
+const recordingStatus = document.getElementById('recordingStatus');
+const clickCounter = document.getElementById('clickCounter');
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomValue = document.getElementById('zoomValue');
+const zoomSpeed = document.getElementById('zoomSpeed');
+const autoZoomToggle = document.getElementById('autoZoomToggle');
+const micToggle = document.getElementById('micToggle');
+const audioToggle = document.getElementById('audioToggle');
+const optionBtns = document.querySelectorAll('.option-btn');
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let paused          = false;
-let timerId         = null;
-let timerSeconds    = 0;
-let stopSafetyTimer = null;
+let isRecording = false;
+let isPaused = false;
+let timerId = null;
+let startEpoch = null;
+let pendingSettings = {};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function safeRuntimeSend(message) {
@@ -24,253 +33,278 @@ async function safeStorageGet(keys) {
   catch (_) { return {}; }
 }
 
+async function safeStorageSet(values) {
+  try { await chrome.storage.local.set(values); }
+  catch (_) {}
+}
+
 async function safeStorageRemove(keys) {
   try { await chrome.storage.local.remove(keys); }
   catch (_) {}
 }
 
-function setError(text) {
-  errorEl.textContent = text || "";
+function formatHMS(totalSeconds) {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function formatTime(totalSeconds) {
-  const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const s = String(totalSeconds % 60).padStart(2, "0");
-  return `${m}:${s}`;
+function getCurrentSettings() {
+  return {
+    autoZoom: autoZoomToggle.classList.contains('active'),
+    zoomLevel: parseInt(zoomSlider.value) / 10,
+    zoomSpeed: zoomSpeed.value,
+    mic: micToggle.classList.contains('active'),
+    systemAudio: audioToggle.classList.contains('active'),
+    recordingArea: document.querySelector('.option-btn.active')?.dataset.area || 'tab'
+  };
 }
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
-function startTimer(startEpochMs) {
-  stopTimer(true);
-  timerSeconds = Math.max(0, Math.floor((Date.now() - startEpochMs) / 1000));
-  timerEl.textContent = formatTime(timerSeconds);
-  timerEl.classList.add("active");
-  timerId = setInterval(() => {
-    timerSeconds++;
-    timerEl.textContent = formatTime(timerSeconds);
-  }, 1000);
+function startTimer(epoch) {
+  stopTimer();
+  startEpoch = epoch || Date.now();
+  updateTimer();
+  timerId = setInterval(updateTimer, 1000);
+}
+
+function updateTimer() {
+  const elapsed = Math.floor((Date.now() - startEpoch) / 1000);
+  recordingTimer.textContent = formatHMS(elapsed);
 }
 
 function pauseTimer() {
-  if (timerId) { clearInterval(timerId); timerId = null; }
+  if (timerId) {
+    clearInterval(timerId);
+    timerId = null;
+  }
 }
 
 function resumeTimer() {
-  if (timerId) return;
-  timerEl.classList.add("active");
-  timerId = setInterval(() => {
-    timerSeconds++;
-    timerEl.textContent = formatTime(timerSeconds);
-  }, 1000);
+  if (!timerId) {
+    timerId = setInterval(updateTimer, 1000);
+  }
 }
 
-function stopTimer(keepDisplay) {
-  if (timerId) { clearInterval(timerId); timerId = null; }
-  if (!keepDisplay) {
-    timerSeconds = 0;
-    timerEl.textContent = "00:00";
-    timerEl.classList.remove("active");
+function stopTimer() {
+  if (timerId) {
+    clearInterval(timerId);
+    timerId = null;
   }
+  startEpoch = null;
+  recordingTimer.textContent = '00:00:00';
 }
 
 // ─── UI States ───────────────────────────────────────────────────────────────
-function setIdleUI() {
-  recordBtn.hidden   = false;
-  recordBtn.disabled = false;
-  pauseBtn.hidden    = true;
-  stopBtn.hidden     = true;
-  stopBtn.disabled   = false;
-  pauseBtn.disabled  = false;
-  paused = false;
-  statusEl.textContent = "Ready to record";
-  clicksInfoEl.classList.remove("visible");
-  setError("");
-  stopTimer(false);
-  if (stopSafetyTimer) { clearTimeout(stopSafetyTimer); stopSafetyTimer = null; }
+function showIdleState() {
+  idleState.style.display = 'block';
+  recordingState.style.display = 'none';
+  isRecording = false;
+  isPaused = false;
 }
 
-function setRecordingUI(startEpochMs) {
-  recordBtn.hidden   = true;
-  pauseBtn.hidden    = false;
-  pauseBtn.disabled  = false;
-  stopBtn.hidden     = false;
-  stopBtn.disabled   = false;
-  pauseBtn.textContent = "Pause";
-  paused = false;
-  statusEl.textContent = "Recording...";
-  clicksInfoEl.classList.add("visible");
-  if (startEpochMs) { startTimer(startEpochMs); }
-  else              { resumeTimer(); }
-}
-
-function setPausedUI() {
-  pauseBtn.textContent = "Resume";
-  paused = true;
-  statusEl.textContent = "Paused";
-  pauseTimer();
+function showRecordingState() {
+  idleState.style.display = 'none';
+  recordingState.style.display = 'block';
+  recordingState.style.display = 'block';
+  isRecording = true;
 }
 
 function updateClickCount(count) {
-  if (typeof count === "number") {
-    clicksInfoEl.textContent = `${count} click${count === 1 ? "" : "s"} captured`;
-  }
+  clickCounter.textContent = `${count} clicks captured`;
 }
 
-// ─── Download ────────────────────────────────────────────────────────────────
-async function handleRecordingComplete(message) {
-  try {
-    const { videoBase64, mimeType } = message;
-    if (!videoBase64) {
-      setError("Recording failed to finalize.");
-      setIdleUI();
-      return;
-    }
-    const blob = await (await fetch(videoBase64)).blob();
-    const url  = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href     = url;
-    link.download = `zoomclip-${Date.now()}.webm`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    await safeStorageRemove(["pendingDownload"]);
-    setIdleUI();
-  } catch (_) {
-    setError("Download failed. Try again.");
-    setIdleUI();
-  }
+function updateRecordingStatus(domain) {
+  recordingStatus.textContent = domain ? `Recording ${domain}...` : 'Recording...';
 }
+
+// ─── Settings Handlers ───────────────────────────────────────────────────────
+function setupToggle(toggle, storageKey) {
+  toggle.addEventListener('click', () => {
+    toggle.classList.toggle('active');
+    safeStorageSet({ [storageKey]: toggle.classList.contains('active') });
+  });
+}
+
+setupToggle(autoZoomToggle, 'autoZoom');
+setupToggle(micToggle, 'micEnabled');
+setupToggle(audioToggle, 'systemAudioEnabled');
+
+zoomSlider.addEventListener('input', () => {
+  const val = parseInt(zoomSlider.value) / 10;
+  zoomValue.textContent = `${val.toFixed(1)}x`;
+  safeStorageSet({ zoomLevel: zoomSlider.value });
+});
+
+zoomSpeed.addEventListener('change', () => {
+  safeStorageSet({ zoomSpeed: zoomSpeed.value });
+});
+
+optionBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    optionBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    safeStorageSet({ recordingArea: btn.dataset.area });
+  });
+});
 
 // ─── Record Button ───────────────────────────────────────────────────────────
-recordBtn.addEventListener("click", () => {
-  setError("");
-  statusEl.textContent = "Starting...";
-  recordBtn.disabled = true;
+startRecordBtn.addEventListener('click', async () => {
+  startRecordBtn.disabled = true;
+  startRecordBtn.textContent = 'Starting...';
 
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tab = tabs && tabs.length ? tabs[0] : null;
+    const tab = tabs?.[0];
 
-    // Must have a valid tab
-    if (!tab || typeof tab.id !== "number") {
-      setIdleUI();
-      setError("No active tab found.");
+    if (!tab?.id) {
+      startRecordBtn.disabled = false;
+      startRecordBtn.innerHTML = '<span class="record-dot"></span>Start Recording';
       return;
     }
 
-    // tabCapture only works on http/https pages
-    if (!tab.url || (!tab.url.startsWith("http://") && !tab.url.startsWith("https://"))) {
-      setIdleUI();
-      setError("Open an http/https website first, then click Record.");
+    if (!tab.url?.startsWith('http')) {
+      startRecordBtn.disabled = false;
+      startRecordBtn.innerHTML = '<span class="record-dot"></span>Start Recording';
       return;
     }
 
-    // getMediaStreamId MUST be called directly here with no async gap before it
     chrome.tabCapture.getMediaStreamId({ consumerTabId: tab.id }, async (streamId) => {
       const lastError = chrome.runtime.lastError;
       if (lastError || !streamId) {
-        setIdleUI();
-        setError(lastError ? lastError.message : "Permission denied. Try again.");
+        startRecordBtn.disabled = false;
+        startRecordBtn.innerHTML = '<span class="record-dot"></span>Start Recording';
         return;
       }
 
-      try {
-        const result = await safeRuntimeSend({
-          type: "START_RECORDING",
-          streamId,
-          tabId: tab.id
-        });
-        if (!result) {
-          setIdleUI();
-          setError("Background not ready. Reload the extension.");
-          return;
-        }
-        // UI stays on "Starting..." until OFFSCREEN_STARTED arrives
-        statusEl.textContent = "Starting...";
-      } catch (_) {
-        setIdleUI();
-        setError("Failed to start recording.");
-      }
+      const domain = new URL(tab.url).hostname;
+      pendingSettings = getCurrentSettings();
+
+      await safeRuntimeSend({
+        type: 'START_RECORDING',
+        streamId,
+        tabId: tab.id,
+        domain,
+        settings: pendingSettings
+      });
+
+      showRecordingState();
+      updateRecordingStatus(domain);
+      startRecordBtn.disabled = false;
+      startRecordBtn.innerHTML = '<span class="record-dot"></span>Start Recording';
     });
   });
 });
 
 // ─── Pause / Resume ──────────────────────────────────────────────────────────
-pauseBtn.addEventListener("click", async () => {
-  try {
-    if (paused) {
-      setRecordingUI(null);
-      await safeRuntimeSend({ type: "RESUME_RECORDING" });
-    } else {
-      setPausedUI();
-      await safeRuntimeSend({ type: "PAUSE_RECORDING" });
-    }
-  } catch (_) {
-    setError("Pause/resume failed.");
+pauseBtn.addEventListener('click', async () => {
+  if (isPaused) {
+    isPaused = false;
+    pauseBtn.textContent = 'Pause';
+    resumeTimer();
+    await safeRuntimeSend({ type: 'RESUME_RECORDING' });
+  } else {
+    isPaused = true;
+    pauseBtn.textContent = 'Resume';
+    pauseTimer();
+    await safeRuntimeSend({ type: 'PAUSE_RECORDING' });
   }
 });
 
 // ─── Stop ────────────────────────────────────────────────────────────────────
-stopBtn.addEventListener("click", async () => {
-  try {
-    stopBtn.disabled  = true;
-    pauseBtn.disabled = true;
-    statusEl.textContent = "Finalizing...";
-    await safeRuntimeSend({ type: "STOP_RECORDING" });
+stopBtn.addEventListener('click', async () => {
+  stopBtn.disabled = true;
+  pauseBtn.disabled = true;
+  recordingStatus.textContent = 'Finalizing...';
 
-    // Safety net — reset if RECORDING_COMPLETE never arrives
-    stopSafetyTimer = setTimeout(() => {
-      setError("Timed out. Try again.");
-      setIdleUI();
-    }, 10000);
-  } catch (_) {
-    setError("Stop failed.");
-    setIdleUI();
-  }
+  await safeRuntimeSend({ type: 'STOP_RECORDING' });
+
+  // Wait up to 10s then reset
+  setTimeout(() => {
+    showIdleState();
+    stopBtn.disabled = false;
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
+    stopTimer();
+  }, 10000);
 });
 
 // ─── Message Listener ────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message) => {
-  if (!message || !message.type) return;
+  if (!message?.type) return;
 
-  if (message.type === "OFFSCREEN_STARTED") {
-    // Real start epoch from offscreen — set timer accurately
-    setRecordingUI(message.startEpoch);
+  if (message.type === 'OFFSCREEN_STARTED') {
+    startEpoch = message.startEpoch;
+    startTimer(startEpoch);
     return;
   }
 
-  if (message.type === "RECORDING_COMPLETE") {
-    if (stopSafetyTimer) { clearTimeout(stopSafetyTimer); stopSafetyTimer = null; }
-    handleRecordingComplete(message);
+  if (message.type === 'RECORDING_COMPLETE') {
+    safeStorageRemove(['pendingRecording']);
+    showIdleState();
+    stopTimer();
+    stopBtn.disabled = false;
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
     return;
   }
 
-  if (message.type === "CLICK_COUNT") {
+  if (message.type === 'CLICK_COUNT') {
     updateClickCount(message.count);
     return;
   }
 });
 
-// ─── Restore State on Open ───────────────────────────────────────────────────
+// ─── Restore State on Load ───────────────────────────────────────────────────
 (async () => {
-  try {
-    const state = await safeStorageGet([
-      "isRecording", "startTime", "isPaused", "pendingDownload"
-    ]);
+  const state = await safeStorageGet([
+    'isRecording', 'startTime', 'isPaused', 'pendingRecording',
+    'autoZoom', 'zoomLevel', 'zoomSpeed', 'micEnabled', 'systemAudioEnabled', 'recordingArea', 'clickCount'
+  ]);
 
-    // If recording finished while popup was closed, download now
-    if (state.pendingDownload) {
-      await handleRecordingComplete(state.pendingDownload);
-      return;
-    }
+  // Clear any pending recording (editor handles it)
+  if (state.pendingRecording) {
+    await safeStorageRemove(['pendingRecording']);
+  }
 
-    if (state.isRecording) {
-      setRecordingUI(state.startTime || Date.now());
-      if (state.isPaused) setPausedUI();
-    } else {
-      setIdleUI();
+  // Restore settings
+  if (state.autoZoom !== undefined) {
+    autoZoomToggle.classList.toggle('active', state.autoZoom);
+  }
+  if (state.micEnabled !== undefined) {
+    micToggle.classList.toggle('active', state.micEnabled);
+  }
+  if (state.systemAudioEnabled !== undefined) {
+    audioToggle.classList.toggle('active', state.systemAudioEnabled);
+  }
+  if (state.zoomLevel !== undefined) {
+    zoomSlider.value = state.zoomLevel;
+    zoomValue.textContent = `${(parseInt(state.zoomLevel) / 10).toFixed(1)}x`;
+  }
+  if (state.zoomSpeed !== undefined) {
+    zoomSpeed.value = state.zoomSpeed;
+  }
+  if (state.recordingArea !== undefined) {
+    optionBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.area === state.recordingArea);
+    });
+  }
+
+  // Check recording state
+  if (state.isRecording) {
+    showRecordingState();
+    updateRecordingStatus(state.activeTabDomain);
+    updateClickCount(state.clickCount || 0);
+    if (state.startTime) {
+      startEpoch = state.startTime;
+      startTimer(startEpoch);
     }
-  } catch (_) {
-    setIdleUI();
+    if (state.isPaused) {
+      isPaused = true;
+      pauseBtn.textContent = 'Resume';
+      pauseTimer();
+    }
+  } else {
+    showIdleState();
   }
 })();

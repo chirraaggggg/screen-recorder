@@ -1,19 +1,77 @@
-import Link from "next/link";
+'use client';
 
 export function Footer() {
-  return (
-    <footer className="w-full border-t border-cardBorder bg-bg">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10 md:flex-row md:items-center md:justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <span
-            className="h-2.5 w-2.5 rounded-pill bg-green"
-            style={{ boxShadow: "0 0 10px rgba(56,216,111,0.7)" }}
-            aria-hidden
-          />
-          <span className="text-sm font-semibold text-text">ZoomClip</span>
-        </Link>
+  const links = [
+    { href: '#features', label: 'Features' },
+    { href: '#pricing', label: 'Pricing' },
+    { href: 'https://github.com', label: 'GitHub' },
+    { href: '#', label: 'Privacy' },
+    { href: '#', label: 'Terms' },
+  ];
 
-        <div className="text-sm text-muted">© {new Date().getFullYear()} ZoomClip</div>
+  return (
+    <footer
+      style={{
+        borderTop: '1px solid var(--border)',
+        padding: '48px 0',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}
+    >
+      {/* Row 1 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 24px 24px',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        {/* Logo */}
+        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: 'var(--green)',
+              boxShadow: '0 0 10px rgba(52,211,116,0.7)',
+            }}
+          />
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>ZoomClip</span>
+        </a>
+
+        {/* Links */}
+        <nav style={{ display: 'flex', gap: 24 }}>
+          {links.map((link) => (
+            <a
+              key={link.label}
+              href={link.href}
+              style={{
+                fontSize: 14,
+                color: 'var(--muted)',
+                textDecoration: 'none',
+                transition: 'color 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* Made with */}
+        <div style={{ fontSize: 14, color: 'var(--muted)' }}>Made with ❤️</div>
+      </div>
+
+      {/* Row 2 */}
+      <div style={{ textAlign: 'center', padding: '0 24px' }}>
+        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+          © 2025 ZoomClip. All rights reserved.
+        </p>
       </div>
     </footer>
   );

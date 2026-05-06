@@ -1,41 +1,233 @@
-import Link from "next/link";
+'use client';
+
+interface FeatureItem {
+  included: boolean;
+  text: string;
+}
+
+function CheckIcon() {
+  return (
+    <span style={{ color: 'var(--green)', marginRight: 8 }}>✓</span>
+  );
+}
+
+function XIcon() {
+  return (
+    <span style={{ color: 'var(--muted)', marginRight: 8 }}>✗</span>
+  );
+}
+
+function Feature({ included, text }: FeatureItem) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', fontSize: 14, marginBottom: 8 }}>
+      {included ? <CheckIcon /> : <XIcon />}
+      <span style={{ color: included ? 'var(--text)' : 'var(--muted)' }}>{text}</span>
+    </div>
+  );
+}
 
 export function Pricing() {
+  const freeFeatures: FeatureItem[] = [
+    { included: true, text: '5 exports per month' },
+    { included: true, text: 'Auto-zoom on every click' },
+    { included: true, text: 'Spring physics animations' },
+    { included: true, text: 'Basic backgrounds' },
+    { included: true, text: 'MP4 export' },
+    { included: true, text: '720p resolution' },
+    { included: false, text: 'Custom watermark removal' },
+    { included: false, text: '1080p / 4K export' },
+    { included: false, text: 'Unlimited exports' },
+  ];
+
+  const proFeatures: FeatureItem[] = [
+    { included: true, text: 'Unlimited exports' },
+    { included: true, text: 'No watermark' },
+    { included: true, text: '1080p + 4K export' },
+    { included: true, text: 'All backgrounds' },
+    { included: true, text: 'Custom watermark' },
+    { included: true, text: 'Spring + snappy + instant speeds' },
+    { included: true, text: 'Priority export queue' },
+  ];
+
   return (
-    <section id="pricing" className="w-full bg-bg">
-      <div className="mx-auto max-w-6xl px-6 py-16">
-        <h2 className="text-2xl font-semibold text-text">Pricing</h2>
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-card border border-cardBorder bg-panel p-6">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold text-text">Free</div>
-              <div className="text-sm font-semibold text-muted">$0</div>
-            </div>
-            <ul className="mt-4 space-y-2 text-sm text-muted">
-              <li>5 exports/month</li>
-              <li>Watermark</li>
-              <li>720p</li>
-            </ul>
-            <Link
-              href="/editor"
-              className="mt-6 inline-flex w-full items-center justify-center rounded-input bg-accent px-4 py-3 text-sm font-semibold text-bg shadow-[0_0_18px_rgba(255,77,77,0.5)] hover:brightness-110 active:brightness-95"
+    <section
+      id="pricing"
+      style={{
+        padding: '120px 0',
+        maxWidth: 900,
+        margin: '0 auto',
+        textAlign: 'center',
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 32,
+          fontWeight: 700,
+          color: 'var(--text)',
+          marginBottom: 8,
+        }}
+      >
+        Simple pricing
+      </h2>
+      <p
+        style={{
+          fontSize: 16,
+          color: 'var(--muted)',
+          marginBottom: 60,
+        }}
+      >
+        Start free. Upgrade when you need more.
+      </p>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 24,
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          padding: '0 24px',
+        }}
+      >
+        {/* FREE card */}
+        <div
+          style={{
+            width: 420,
+            backgroundColor: 'var(--panel)',
+            border: '1px solid var(--border)',
+            borderRadius: 16,
+            padding: 32,
+            textAlign: 'left',
+          }}
+        >
+          <div style={{ marginBottom: 8 }}>
+            <span
+              style={{
+                fontSize: 40,
+                fontWeight: 700,
+                color: 'var(--text)',
+              }}
             >
-              Try the Editor
-            </Link>
+              $0
+            </span>
+            <span style={{ fontSize: 14, color: 'var(--muted)', marginLeft: 4 }}>/month</span>
+          </div>
+          <p
+            style={{
+              fontSize: 14,
+              color: 'var(--muted)',
+              marginBottom: 24,
+            }}
+          >
+            Perfect for indie hackers and small projects
+          </p>
+
+          <div style={{ marginBottom: 24 }}>
+            {freeFeatures.map((f, i) => (
+              <Feature key={i} {...f} />
+            ))}
           </div>
 
-          <div className="rounded-card border border-cardBorder bg-panel p-6">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold text-text">Pro</div>
-              <div className="text-sm font-semibold text-muted">$15/month</div>
-            </div>
-            <ul className="mt-4 space-y-2 text-sm text-muted">
-              <li>Unlimited exports</li>
-              <li>No watermark</li>
-              <li>1080p</li>
-              <li>Priority processing</li>
-            </ul>
+          <button
+            style={{
+              width: '100%',
+              padding: '12px 0',
+              border: '1px solid var(--border)',
+              backgroundColor: 'transparent',
+              color: 'var(--text)',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'border-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+          >
+            Get started free
+          </button>
+        </div>
+
+        {/* PRO card */}
+        <div
+          style={{
+            width: 420,
+            background: 'linear-gradient(180deg, rgba(52,211,116,0.04) 0%, transparent 100%)',
+            border: '1px solid var(--green)',
+            borderRadius: 16,
+            padding: 32,
+            textAlign: 'left',
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: -1,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'var(--green)',
+              color: 'var(--bg)',
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              padding: '4px 12px',
+              borderRadius: '0 0 4px 4px',
+              textTransform: 'uppercase',
+            }}
+          >
+            MOST POPULAR
           </div>
+
+          <div style={{ marginBottom: 8, marginTop: 8 }}>
+            <span
+              style={{
+                fontSize: 40,
+                fontWeight: 700,
+                color: 'var(--text)',
+              }}
+            >
+              $15
+            </span>
+            <span style={{ fontSize: 14, color: 'var(--muted)', marginLeft: 4 }}>/month</span>
+          </div>
+          <p
+            style={{
+              fontSize: 14,
+              color: 'var(--muted)',
+              marginBottom: 24,
+            }}
+          >
+            For serious founders and product teams
+          </p>
+
+          <div style={{ marginBottom: 24 }}>
+            {proFeatures.map((f, i) => (
+              <Feature key={i} {...f} />
+            ))}
+          </div>
+
+          <a
+            href="https://chromewebstore.google.com/"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '12px 0',
+              backgroundColor: 'var(--green)',
+              color: 'var(--bg)',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              textAlign: 'center',
+              textDecoration: 'none',
+              transition: 'opacity 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            Get Pro →
+          </a>
         </div>
       </div>
     </section>

@@ -5,194 +5,331 @@
     <title>ZoomClip</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg: #0f0f0f;
-        --panel: #181818;
-        --panel-2: #1f1f1f;
-        --text: #f5f5f5;
-        --muted: #a0a0a0;
-        --accent: #ff4d4d;
-        --accent-2: #38d86f;
-        --error: #ff6b6b;
+        --bg: #111111;
+        --panel: #1a1a1a;
+        --text: #f0f0f0;
+        --muted: #888888;
+        --accent: #ff4444;
+        --green: #34d374;
+        --border: rgba(255, 255, 255, 0.07);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 16px 16px 12px;
+        padding: 16px;
         background: var(--bg);
         color: var(--text);
-        font-family: "Inter", "Segoe UI", sans-serif;
+        font-family: 'Inter', -apple-system, sans-serif;
         width: 320px;
       }
       .header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 14px;
+        justify-content: space-between;
+        margin-bottom: 16px;
       }
-      .logo-dot {
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: var(--accent-2);
-        box-shadow: 0 0 10px rgba(56, 216, 111, 0.7);
+        background: var(--green);
+        box-shadow: 0 0 8px rgba(52, 211, 116, 0.5);
       }
       .title {
         font-size: 16px;
         font-weight: 600;
-        letter-spacing: 0.2px;
       }
-      .card {
-        background: var(--panel);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 14px;
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 12px;
-      }
-      .timer {
-        font-size: 22px;
-        font-weight: 600;
-        text-align: center;
-        letter-spacing: 1px;
-        opacity: 0;
-        height: 0;
-        overflow: hidden;
-        transition: opacity 0.2s ease, height 0.2s ease;
-      }
-      .timer.active {
-        opacity: 1;
-        height: 28px;
-      }
-      .buttons {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
-      }
-      button {
-        border: none;
-        border-radius: 999px;
-        padding: 10px 20px;
+      .gear {
+        width: 20px;
+        height: 20px;
         cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        font-family: "Inter", "Segoe UI", sans-serif;
-        transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+        opacity: 0.6;
+        transition: opacity 0.2s;
       }
-      button:active { transform: scale(0.96); }
-      button:disabled { opacity: 0.4; cursor: not-allowed; }
-      .record-btn {
-        width: 64px;
-        height: 64px;
-        padding: 0;
-        border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%, #ff7373, var(--accent));
-        box-shadow: 0 0 18px rgba(255, 77, 77, 0.5);
-        flex-shrink: 0;
-      }
-      .record-btn:hover:not(:disabled) {
-        box-shadow: 0 0 28px rgba(255, 77, 77, 0.8);
-        transform: scale(1.04);
-      }
-      .pause-btn {
-        background: var(--panel-2);
-        color: var(--text);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-      }
-      .pause-btn:hover:not(:disabled) { background: #2a2a2a; }
-      .stop-btn {
-        background: #2a2a2a;
-        color: var(--text);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-      .stop-btn:hover:not(:disabled) { background: #333; }
-      .status {
-        font-size: 12px;
-        color: var(--muted);
-        text-align: center;
-        min-height: 16px;
-        transition: color 0.2s ease;
-      }
-      .clicks-info {
+      .gear:hover { opacity: 1; }
+      .section-label {
         font-size: 11px;
-        color: var(--accent-2);
-        text-align: center;
-        opacity: 0;
-        height: 0;
-        overflow: hidden;
-        transition: opacity 0.3s ease, height 0.2s ease;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
       }
-      .clicks-info.visible {
-        opacity: 1;
-        height: 16px;
+      .option-btns {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
       }
-      .error {
+      .option-btn {
+        flex: 1;
+        padding: 8px 0;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
         font-size: 12px;
-        color: var(--error);
-        min-height: 16px;
-        text-align: center;
-        word-break: break-word;
-        line-height: 1.4;
+        cursor: pointer;
+        transition: all 0.2s;
       }
-      .bottom {
-        margin-top: 12px;
-        padding: 10px 12px;
-        background: var(--panel);
-        border-radius: 12px;
+      .option-btn:hover { background: rgba(255,255,255,0.05); }
+      .option-btn.active {
+        background: rgba(52, 211, 116, 0.15);
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 12px 0;
+      }
+      .row {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        padding: 10px 0;
+      }
+      .row-label {
+        font-size: 13px;
+      }
+      .toggle {
+        width: 44px;
+        height: 24px;
+        background: #333;
+        border-radius: 12px;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .toggle.active {
+        background: var(--green);
+      }
+      .toggle::after {
+        content: '';
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        top: 2px;
+        left: 2px;
+        transition: transform 0.2s;
+      }
+      .toggle.active::after {
+        transform: translateX(20px);
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .slider {
+        flex: 1;
+        height: 4px;
+        -webkit-appearance: none;
+        background: #333;
+        border-radius: 2px;
+        outline: none;
+      }
+      .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+      .value {
         font-size: 12px;
         color: var(--muted);
-        border: 1px solid rgba(255, 255, 255, 0.04);
+        min-width: 32px;
+        text-align: right;
       }
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        background: rgba(56, 216, 111, 0.15);
-        color: var(--accent-2);
-        padding: 3px 9px;
-        border-radius: 999px;
+      select {
+        background: #222;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .record-btn {
+        width: 100%;
+        height: 44px;
+        background: var(--accent);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
         font-weight: 600;
-        font-size: 11px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 12px;
+        transition: opacity 0.2s;
       }
-      .pill::before {
-        content: "";
-        width: 6px;
-        height: 6px;
+      .record-btn:hover { opacity: 0.9; }
+      .record-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .record-dot {
+        width: 8px;
+        height: 8px;
+        background: white;
         border-radius: 50%;
-        background: var(--accent-2);
       }
-      [hidden] { display: none !important; }
+      .footer {
+        text-align: center;
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 12px;
+      }
+      .recording-state { display: none; }
+      .recording-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .recording-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1.4s infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .timer-display {
+        font-size: 14px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .click-count {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 8px 0;
+      }
+      .recording-btns {
+        display: flex;
+        gap: 8px;
+      }
+      .recording-btns button {
+        flex: 1;
+        height: 36px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .recording-btns button:hover { background: rgba(255,255,255,0.05); }
+      .status-text {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
     </style>
   </head>
   <body>
-    <div class="header">
-      <div class="logo-dot"></div>
-      <div class="title">ZoomClip</div>
-    </div>
-
-    <div class="card">
-      <div class="timer" id="timer">00:00</div>
-      <div class="buttons">
-        <button class="record-btn" id="recordBtn" aria-label="Start Recording"></button>
-        <button class="pause-btn" id="pauseBtn" hidden>Pause</button>
-        <button class="stop-btn" id="stopBtn" hidden>Stop</button>
+    <!-- IDLE STATE -->
+    <div id="idleState">
+      <div class="header">
+        <div class="header-left">
+          <div class="dot"></div>
+          <div class="title">ZoomClip</div>
+        </div>
+        <svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
+        </svg>
       </div>
-      <div class="status" id="status">Ready to record</div>
-      <div class="clicks-info" id="clicksInfo">0 clicks captured</div>
-      <div class="error" id="error"></div>
+
+      <div class="section-label">Recording Area</div>
+      <div class="option-btns">
+        <button class="option-btn active" data-area="fullscreen">Full Screen</button>
+        <button class="option-btn" data-area="tab">Tab</button>
+        <button class="option-btn" data-area="custom">Custom</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <span class="row-label">Auto-zoom on click</span>
+        <div class="toggle active" id="autoZoomToggle"></div>
+      </div>
+
+      <div class="row">
+        <span class="row-label">Zoom Level</span>
+        <div class="slider-row">
+          <input type="range" class="slider" id="zoomSlider" min="10" max="30" value="18">
+          <span class="value" id="zoomValue">1.8x</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="row-label">Zoom Speed</span>
+        <select id="zoomSpeed">
+          <option value="smooth">Smooth</option>
+          <option value="snappy">Snappy</option>
+          <option value="instant">Instant</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <span class="row-label">Microphone</span>
+        <div class="toggle" id="micToggle"></div>
+      </div>
+
+      <div class="row">
+        <span class="row-label">System Audio</span>
+        <div class="toggle active" id="audioToggle"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <button class="record-btn" id="startRecordBtn">
+        <span class="record-dot"></span>
+        Start Recording
+      </button>
+
+      <div class="footer">🔒 Your video never leaves your device</div>
     </div>
 
-    <div class="bottom">
-      <span>Auto-zoom on click</span>
-      <span class="pill">ON</span>
+    <!-- RECORDING STATE -->
+    <div id="recordingState" class="recording-state">
+      <div class="recording-header">
+        <div class="header-left">
+          <div class="recording-dot"></div>
+          <div class="title">ZoomClip</div>
+        </div>
+        <div class="timer-display" id="recordingTimer">00:00:00</div>
+        <svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
+        </svg>
+      </div>
+
+      <div class="status-text" id="recordingStatus">Recording...</div>
+      <div class="click-count" id="clickCounter">0 clicks captured</div>
+
+      <div class="recording-btns">
+        <button id="pauseBtn">Pause</button>
+        <button id="stopBtn">Stop</button>
+      </div>
     </div>
 
     <script src="popup.js"></script>

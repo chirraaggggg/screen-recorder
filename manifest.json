@@ -1,24 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "ZoomClip — Screen Recorder",
+  "name": "ZoomClip",
   "version": "1.0.0",
-  "description": "Record the current tab and capture click events with timestamps.",
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "ZoomClip"
-  },
-  "background": {
-    "service_worker": "background.js"
-  },
-  "permissions": [
-    "tabCapture",
-    "activeTab",
-    "storage",
-    "offscreen",
-    "scripting",
-    "tabs"
-  ],
-  "host_permissions": [
-    "<all_urls>"
+  "description": "Screen recorder with auto-zoom on every click.",
+  "action": { "default_popup": "popup.html", "default_title": "ZoomClip" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["tabCapture","activeTab","storage","offscreen","scripting","tabs"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*"],
+      "js": ["editor-bridge.js"]
+    }
   ]
 }
