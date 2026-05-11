@@ -48,8 +48,11 @@ export async function exportVideo(
     onProgress(pct, estimatedFrame, totalFrames, eta);
   });
 
-  // Load FFmpeg
-  await ffmpeg.load();
+  // Load FFmpeg with local files (required for SharedArrayBuffer/COOP/COEP)
+  await ffmpeg.load({
+    coreURL: '/ffmpeg-core.js',
+    wasmURL: '/ffmpeg-core.wasm',
+  });
 
   // Write input file
   const inputName = 'input.mp4';
@@ -138,8 +141,8 @@ export async function exportVideo(
     // Ignore cleanup errors
   }
 
-  // Convert to Blob
-  const blob = new Blob([outputData as Uint8Array], {
+  // Convert to Blob (cast through unknown to handle ArrayBufferLike type)
+  const blob = new Blob([outputData as unknown as Uint8Array], {
     type: exportSettings.format === 'mp4' ? 'video/mp4' : 'image/gif',
   });
 

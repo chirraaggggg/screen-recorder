@@ -95,33 +95,35 @@ async function injectFloatingBar(tabId) {
 }
 
 // ─── Editor Handling ─────────────────────────────────────────────────────────
+async function waitForEditor(tabId, clickEvents, maxAttempts = 10) {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 500))
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'EDITOR_PING' })
+      if (response?.ready) {
+        await chrome.tabs.sendMessage(tabId, {
+          type: 'ZOOMCLIP_CLICKS',
+          clickEvents
+        })
+        return
+      }
+    } catch(_) {}
+  }
+}
+
 async function openOrFocusEditor(clickEvents, startEpoch) {
   const tabs = await chrome.tabs.query({});
   const editorTab = tabs.find(t => t.url && t.url.includes(EDITOR_URL));
 
   if (editorTab && editorTab.id) {
     await chrome.tabs.update(editorTab.id, { active: true });
-    try {
-      await chrome.tabs.sendMessage(editorTab.id, {
-        type: 'ZOOMCLIP_CLICKS',
-        clickEvents,
-        startEpoch
-      });
-    } catch (_) {}
+    await waitForEditor(editorTab.id, clickEvents)
   } else {
     const newTab = await chrome.tabs.create({ url: EDITOR_URL });
-    // Wait for tab to load then send message
-    setTimeout(async () => {
-      if (newTab.id) {
-        try {
-          await chrome.tabs.sendMessage(newTab.id, {
-            type: 'ZOOMCLIP_CLICKS',
-            clickEvents,
-            startEpoch
-          });
-        } catch (_) {}
-      }
-    }, 2500);
+    // Wait for tab to load then poll for readiness
+    if (newTab.id) {
+      await waitForEditor(newTab.id, clickEvents)
+    }
   }
 }
 

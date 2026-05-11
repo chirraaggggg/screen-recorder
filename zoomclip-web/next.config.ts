@@ -13,11 +13,8 @@ const nextConfig: NextConfig = {
       },
     ]
   },
-  // Webpack: handle WASM files
-  webpack(config) {
-    config.experiments = { ...config.experiments, asyncWebAssembly: true }
-    return config
-  },
+  // Silence Turbopack warning (Next.js 16 enables Turbopack by default)
+  turbopack: {},
 }
 
 export default nextConfig

@@ -138,11 +138,26 @@ export default function EditorPage() {
   };
 
   // Handle apply zoom effects
-  const handleApplyZoomEffects = () => {
-    const frames = generateZoomTimeline(clickEvents, { ...zoom, level: globalZoomLevel, speed: globalSpeed }, videoDuration * 1000, 60);
-    setZoomFrames(frames);
-    showToast('Zoom effects ready — click Export to save', 'success');
-  };
+  async function handleApplyZoom() {
+    if (!videoFile || clickEvents.length === 0) return
+
+    setProcessing({ status: 'processing', message: 'Generating zoom timeline...' })
+
+    // Run in next tick to not block UI
+    await new Promise(r => setTimeout(r, 10))
+
+    const frames = generateZoomTimeline(
+      clickEvents,
+      { ...zoom, level: globalZoomLevel, speed: globalSpeed },
+      videoDuration * 1000,  // ms
+      60
+    )
+
+    setZoomFrames(frames)
+    setProcessing({ status: 'idle', progress: 0, outputUrl: null, message: '' })
+
+    showToast('Zoom effects applied — ready to export!', 'success')
+  }
 
   // Handle download
   const handleDownload = () => {
@@ -502,7 +517,7 @@ export default function EditorPage() {
               </div>
 
               <button
-                onClick={handleApplyZoomEffects}
+                onClick={handleApplyZoom}
                 style={{
                   width: '100%',
                   padding: '10px 0',

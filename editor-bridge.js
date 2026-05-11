@@ -1,9 +1,14 @@
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'ZOOMCLIP_CLICKS') {
+// Respond to ping so background knows editor is ready
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'EDITOR_PING') {
+    sendResponse({ ready: true })
+    return true
+  }
+  if (msg.type === 'ZOOMCLIP_CLICKS') {
     window.postMessage({
       type: 'ZOOMCLIP_CLICKS',
-      clickEvents: message.clickEvents,
-      startEpoch: message.startEpoch
-    }, '*');
+      clickEvents: msg.clickEvents,
+      startEpoch: msg.startEpoch
+    }, '*')
   }
-});
+})
